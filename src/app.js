@@ -220,16 +220,23 @@ app.post('/balances/deposit/:userId', getProfile, async(req,res)=>{
  *  for any contactor that worked in the query time range.
  */
 app.get('/admin/best-profession', getProfile, async (req, res) => {
-/*
-Running out of time: TODO: implement based on the following SQL code 
 
-SELECT u.profession, SUM(j.price) AS earnedAmount FROM Jobs j
-    LEFT JOIN Contracts c ON c.id = j.ContractId
-    LEFT JOIN Profiles u ON u.id = c.ContractorId
-WHERE j.paid = TRUE AND j.paymentDate >= :startDate AND j.paymentDate <= :endDate 
-    GROUP BY u.profession 
-    ORDER BY earnedAmount DESC LIMIT (1)
- */
+    const { start, end } = req.query;
+
+    const results = await sequelize.query(
+        "SELECT u.profession, SUM(j.price) AS earnedAmount FROM Jobs j" +
+        "    LEFT JOIN Contracts c ON c.id = j.ContractId" +
+        "    LEFT JOIN Profiles u ON u.id = c.ContractorId" +
+        " WHERE j.paid = TRUE AND j.paymentDate >= :start AND j.paymentDate <= :end " +
+        "    GROUP BY u.profession " +
+        "    ORDER BY earnedAmount DESC LIMIT (1) ",
+        { type: QueryTypes.SELECT, replacements: { start, end } });
+
+    if (results) {
+        res.send({ profession: results[0].profession });
+    } else {
+        throw new Error('No results found for the period');
+    }
 });
 
 /**
