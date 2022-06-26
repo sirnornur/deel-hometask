@@ -155,4 +155,63 @@ app.post('/jobs/:jobId/pay', getProfile, async (req, res) => {
     }
 });
 
+/**
+ * POST /balances/deposit/:userId - Deposits money into the the
+ *  balance of a client, 
+ * a client can't deposit more than 25% his total of jobs to pay. (at the deposit moment)
+ */
+app.post('/balances/deposit/:userId', getProfile, async(req,res)=>{
+    const profileId = req.profile.id;
+    const {userId} = req.params;
+    if (parseInt(profileId) !== parseInt(userId)) {
+        // If client can deposit only to his/her account, I think there is No need for the :userId parameter.
+        // Maybe this endpoint will be used by another party/user. Then relevant authorization should be done.
+        throw new Error('Target balance is not found.');
+    }
+
+    const { amount } = req.body;
+
+    // TODO: implement proper deposit amount validation
+    if (!isFinite(amount) || amount <= 0) {
+        throw new Error('Invalid request. "amount" is undefined or invalid.');
+    }
+
+    const { Job, Contract, Profile } = req.app.get('models')
+    const totalAmountToPay = await Job.sum('price', {
+        where: {
+            '$Contract.ClientId$': profileId,
+            paid: false,
+        },
+        include: [{
+            model: Contract,
+            as: 'Contract'
+        }]
+    });
+
+    if (amount > (totalAmountToPay * 0.25)) {
+        console.log(`A client can't deposit more than 25% his total of jobs to pay. User: ${profileId} AmountToPay: ${totalAmountToPay} Deposit: ${amount}`);
+        // TODO: provide better, User-friendly error message here.
+        throw new Error("A client can't deposit more than 25% his total of jobs to pay.");
+    }
+
+    try {
+        await sequelize.transaction(async (transaction) => {
+            const profile = await Profile.findOne({ where: { id: profileId }, transaction });
+            await Profile.update({ balance: profile.balance + amount }, {
+                where: {
+                    id: profileId,
+                    updatedAt: profile.updatedAt,
+                },
+                transaction,
+            });
+        });
+        console.log(`Deposited ${amount} to the balance of the user ${profileId}`);
+        res.send({ success: true });
+    } catch (error) {
+        console.error(`Failed to process the deposit. User: ${profileId} Amount: ${amount}`, error);
+        throw new Error('Failed to process the deposit, please try again later');
+    }
+    res.send({ success: true });
+});
+
 module.exports = app;
