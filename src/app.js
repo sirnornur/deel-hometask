@@ -88,4 +88,71 @@ app.get('/jobs/unpaid', getProfile, async (req, res) => {
     res.json(results)
 });
 
+
+/**
+ * POST /jobs/:job_id/pay - Pay for a job,
+ *  a client can only pay if his balance >= the amount to pay. 
+ * The amount should be moved from the client's balance to the contractor balance.
+ */
+app.post('/jobs/:jobId/pay', getProfile, async (req, res) => {
+    const profileId = req.profile.id
+    const {jobId} = req.params;
+    const { Job, Contract, Profile } = req.app.get('models')
+
+    // only client can pay
+    const job = await Job.findOne({
+        where: {
+            [Op.and]: [
+                {
+                    id: jobId,
+                    '$Contract.ClientId$': profileId,
+                }
+            ]
+        },
+        include: [{
+            model: Contract,
+            as: 'Contract'
+        }]
+    });
+    if (!job) {
+        throw new Error('The job is not found or you do not have enough privileges to access it.');
+    }
+    if (job.paid) {
+        throw new Error('The job is already paid.');
+    }
+    const profile = await Profile.findOne({ where: { id: profileId } });
+    if (profile.balance < job.price) {
+        throw new Error('No sufficient funds in balance.');
+    }
+
+    const contractorId = job.Contract.ContractorId;
+
+    try {
+        await sequelize.transaction(async (transaction) => {
+            await Profile.update({ balance: profile.balance - job.price }, {
+                where: {
+                    id: profileId,
+                    updatedAt: profile.updatedAt,
+                },
+                transaction,
+            });
+
+            const contractor = await Profile.findOne({ where: { id: contractorId }, transaction });
+            await Profile.update({ balance: contractor.balance + job.price }, {
+                where: {
+                    id: contractorId,
+                    updatedAt: contractor.updatedAt,
+                },
+                transaction,
+            });
+
+            await Job.update({ paid: true, paymentDate: new Date() }, { where: { id: jobId }, transaction });
+        });
+        res.send({ success: true });
+    } catch (error) {
+        console.error(`Failed to process the payment. User: ${profileId} Job: ${job.id}`, error);
+        throw new Error('Failed to process the payment, please try again later');
+    }
+});
+
 module.exports = app;
