@@ -2,7 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const {sequelize} = require('./model')
 const {getProfile} = require('./middleware/getProfile')
-const {Op} = require('sequelize');
+const {Op, QueryTypes} = require('sequelize');
 
 const app = express();
 app.use(bodyParser.json());
@@ -231,5 +231,27 @@ WHERE j.paid = TRUE AND j.paymentDate >= :startDate AND j.paymentDate <= :endDat
     ORDER BY earnedAmount DESC LIMIT (1)
  */
 });
+
+/**
+ * GET /admin/best-clients?start=<date>&end=<date>&limit=<integer>
+ * returns the clients the paid the most for jobs in the query time period. 
+ * limit query parameter should be applied, default limit is 2.
+ */
+app.get('/admin/best-clients', getProfile, async (req, res) => {
+    const { start, end, limit } = req.query;
+    const sqlLimit = parseInt(limit) || 2;
+
+    const results = await sequelize.query(
+        "SELECT u.id, (u.firstName || ' ' || u.lastName) AS fullName, SUM(j.price) AS paid FROM Jobs j" +
+        " LEFT JOIN Contracts c ON c.id = j.ContractId" +
+        " LEFT JOIN Profiles u ON u.id = c.ClientId" +
+        " WHERE j.paid = TRUE AND j.paymentDate >= :start AND j.paymentDate <= :end " +
+        " GROUP BY u.id " +
+        " ORDER BY paid DESC LIMIT " + sqlLimit,
+        { type: QueryTypes.SELECT, replacements: { start, end } });
+
+    res.send(results);
+});
+
 
 module.exports = app;
