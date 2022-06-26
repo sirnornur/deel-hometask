@@ -214,4 +214,22 @@ app.post('/balances/deposit/:userId', getProfile, async(req,res)=>{
     res.send({ success: true });
 });
 
+/**
+ * GET /admin/best-profession?start=<date>&end=<date>
+ * Returns the profession that earned the most money (sum of jobs paid)
+ *  for any contactor that worked in the query time range.
+ */
+app.get('/admin/best-profession', getProfile, async (req, res) => {
+/*
+Running out of time: TODO: implement based on the following SQL code 
+
+SELECT u.profession, SUM(j.price) AS earnedAmount FROM Jobs j
+    LEFT JOIN Contracts c ON c.id = j.ContractId
+    LEFT JOIN Profiles u ON u.id = c.ContractorId
+WHERE j.paid = TRUE AND j.paymentDate >= :startDate AND j.paymentDate <= :endDate 
+    GROUP BY u.profession 
+    ORDER BY earnedAmount DESC LIMIT (1)
+ */
+});
+
 module.exports = app;
